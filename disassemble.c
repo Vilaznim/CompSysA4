@@ -75,6 +75,8 @@ void disassemble(uint32_t addr,
                  size_t buf_size,
                  struct symbols *symbols)
 {
+    (void)symbols;  // Suppress unused parameter warning
+    
     // Hvis bufferen er NULL eller størrelse 0, så gør ingenting
     if (result == NULL || buf_size == 0) {
         return;
@@ -105,12 +107,18 @@ void disassemble(uint32_t addr,
             else if (funct3 == 0x1 && funct7 == 0x00) mnemonic = "sll";
             else if (funct3 == 0x5 && funct7 == 0x00) mnemonic = "srl";
             else if (funct3 == 0x5 && funct7 == 0x20) mnemonic = "sra";
+            else if (funct3 == 0x2 && funct7 == 0x00) mnemonic = "slt";
+            else if (funct3 == 0x3 && funct7 == 0x00) mnemonic = "sltu";
 
-            // M-extension: mul, div, rem osv.
+            // M-extension: mul, mulh, mulhsu, mulhu, div, divu, rem, remu
             else if (funct3 == 0x0 && funct7 == 0x01) mnemonic = "mul";
+            else if (funct3 == 0x1 && funct7 == 0x01) mnemonic = "mulh";
+            else if (funct3 == 0x2 && funct7 == 0x01) mnemonic = "mulhsu";
+            else if (funct3 == 0x3 && funct7 == 0x01) mnemonic = "mulhu";
             else if (funct3 == 0x4 && funct7 == 0x01) mnemonic = "div";
+            else if (funct3 == 0x5 && funct7 == 0x01) mnemonic = "divu";
             else if (funct3 == 0x6 && funct7 == 0x01) mnemonic = "rem";
-            // (tilføj flere M-instruktioner efter behov)
+            else if (funct3 == 0x7 && funct7 == 0x01) mnemonic = "remu";
 
             if (mnemonic) {
                 snprintf(result, buf_size, "%s %s, %s, %s",

@@ -95,12 +95,12 @@ int main(int argc, char *argv[])
     // The use of symbols provide for a nicer disassembly, but their us in A4 is optional,
     // so feel free to remove/ignore setup and use of symbols.
     struct symbols* symbols = symbols_read_from_elf(argv[1]);
-    if (symbols == NULL) {
-      exit(-1);
-    }
+    // If symbols fail to load, we can still disassemble without them
     if (argc == 3 && !strcmp(argv[2], "-d")) {
       // disassemble text segment to stdout
       disassemble_to_stdout(mem, &prog_info, symbols);
+      memory_delete(mem);
+      if (symbols) symbols_delete(symbols);
       exit(0);
     }
     int start_addr = prog_info.start;
@@ -128,6 +128,7 @@ int main(int argc, char *argv[])
       printf("\nSimulated %ld instructions in %d host ticks (%f MIPS)\n", num_insns, ticks, mips);
     }
     memory_delete(mem);
+    if (symbols) symbols_delete(symbols);
   }
   else {
     terminate("Missing operands");

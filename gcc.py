@@ -47,8 +47,13 @@ for key, value in flags.items():
 DATA = {}
 DATA["flags"] = parsedflags
 
+# Build list of files to compile - always include lib.c if it exists
+files_to_compile = list(args.files)
+if os.path.isfile("lib.c") and "lib.c" not in files_to_compile:
+  files_to_compile.append("lib.c")
+
 num = 1
-for f in args.files:
+for f in files_to_compile:
   extensions = f.split(".")
   fileextension = extensions[-1]
 
