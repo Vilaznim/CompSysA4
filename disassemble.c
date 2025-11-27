@@ -140,6 +140,8 @@ void disassemble(uint32_t addr,
             else if (funct3 == 0x7) mnemonic = "andi";
             else if (funct3 == 0x6) mnemonic = "ori";
             else if (funct3 == 0x4) mnemonic = "xori";
+            else if (funct3 == 0x2) mnemonic = "slti";
+            else if (funct3 == 0x3) mnemonic = "sltiu";
             else if (funct3 == 0x1 && ((instruction >> 25) & 0x7F) == 0x00) mnemonic = "slli";
             else if (funct3 == 0x5 && ((instruction >> 25) & 0x7F) == 0x00) mnemonic = "srli";
             else if (funct3 == 0x5 && ((instruction >> 25) & 0x7F) == 0x20) mnemonic = "srai";
