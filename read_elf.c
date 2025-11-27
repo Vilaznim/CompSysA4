@@ -140,7 +140,7 @@ struct symbols* symbols_read_from_elf(const char *filename) {
 
     // Read all section headers
     Elf32_Shdr *section_headers = malloc(elf_header.e_shnum * sizeof(Elf32_Shdr));
-    status = fread(section_headers, elf_header.e_shnum, sizeof(Elf32_Shdr), file);
+    status = fread(section_headers, sizeof(Elf32_Shdr), elf_header.e_shnum, file);
     if (status != (int)elf_header.e_shnum) {
         fprintf(stderr, "While reading ELF file: Invalid section header.\n");
         free(section_headers);
@@ -185,7 +185,7 @@ struct symbols* symbols_read_from_elf(const char *filename) {
     symbols->num_symbols = symtab_section->sh_size / sizeof(Elf32_Sym);
     symbols->symbols = malloc(symtab_section->sh_size);
     fseek(file, symtab_section->sh_offset, SEEK_SET);
-    status = fread(symbols->symbols, symbols->num_symbols, sizeof(Elf32_Sym), file);
+    status = fread(symbols->symbols, sizeof(Elf32_Sym), symbols->num_symbols, file);
     if (status != (int)symbols->num_symbols) {
         fprintf(stderr, "Error, unable to read symbol table entry.\n");
         free(symbols->strtab);

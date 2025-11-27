@@ -90,7 +90,10 @@ int main(int argc, char *argv[])
       }
     }
     struct program_info prog_info;
-    int status = read_elf(mem, &prog_info, argv[1], log_file);
+     /* Ensure read_elf always receives a valid FILE*; if no logfile was
+       requested by the user, pass stderr as a safe fallback. This avoids
+       modifying the provided read_elf.c while preventing NULL fprintf()s. */
+     int status = read_elf(mem, &prog_info, argv[1], log_file ? log_file : stderr);
     if (status) exit(status);
     // The use of symbols provide for a nicer disassembly, but their us in A4 is optional,
     // so feel free to remove/ignore setup and use of symbols.

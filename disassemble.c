@@ -134,6 +134,7 @@ void disassemble(uint32_t addr,
         case 0x13: {
             int32_t imm = imm_i(instruction);
             const char *mnemonic = NULL;
+            unsigned shamt = (instruction >> 20) & 0x1F;
 
             if (funct3 == 0x0) mnemonic = "addi";
             else if (funct3 == 0x7) mnemonic = "andi";
@@ -144,12 +145,20 @@ void disassemble(uint32_t addr,
             else if (funct3 == 0x5 && ((instruction >> 25) & 0x7F) == 0x20) mnemonic = "srai";
 
             if (mnemonic) {
-                // shift-immediates er normalt 5-bit, men du kan bare printe imm.
-                snprintf(result, buf_size, "%s %s, %s, %d",
-                         mnemonic,
-                         reg_name(rd),
-                         reg_name(rs1),
-                         imm);
+                if (mnemonic[0] == 's' && (mnemonic[1] == 'l' || mnemonic[1] == 'r')) {
+                    // slli/srli/srai: print shamt (5-bit)
+                    snprintf(result, buf_size, "%s %s, %s, %u",
+                             mnemonic,
+                             reg_name(rd),
+                             reg_name(rs1),
+                             shamt);
+                } else {
+                    snprintf(result, buf_size, "%s %s, %s, %d",
+                             mnemonic,
+                             reg_name(rd),
+                             reg_name(rs1),
+                             imm);
+                }
             }
             break;
         }
@@ -208,11 +217,21 @@ void disassemble(uint32_t addr,
 
             if (mnemonic) {
                 uint32_t target = addr + imm;  // addr er adressen for denne instr.
-                snprintf(result, buf_size, "%s %s, %s, 0x%08x",
-                         mnemonic,
-                         reg_name(rs1),
-                         reg_name(rs2),
-                         target);
+                const char *sym = NULL;
+                if (symbols) sym = symbols_value_to_sym(symbols, target);
+                if (sym) {
+                    snprintf(result, buf_size, "%s %s, %s, %s",
+                             mnemonic,
+                             reg_name(rs1),
+                             reg_name(rs2),
+                             sym);
+                } else {
+                    snprintf(result, buf_size, "%s %s, %s, 0x%08x",
+                             mnemonic,
+                             reg_name(rs1),
+                             reg_name(rs2),
+                             target);
+                }
             }
             break;
         }
@@ -239,9 +258,17 @@ void disassemble(uint32_t addr,
         case 0x6F: {
             int32_t imm = imm_j(instruction);
             uint32_t target = addr + imm;
-            snprintf(result, buf_size, "jal %s, 0x%08x",
-                     reg_name(rd),
-                     target);
+            const char *sym = NULL;
+            if (symbols) sym = symbols_value_to_sym(symbols, target);
+            if (sym) {
+                snprintf(result, buf_size, "jal %s, %s",
+                         reg_name(rd),
+                         sym);
+            } else {
+                snprintf(result, buf_size, "jal %s, 0x%08x",
+                         reg_name(rd),
+                         target);
+            }
             break;
         }
 
