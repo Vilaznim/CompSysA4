@@ -1,0 +1,30 @@
+0x000100d4: auipc x3, 0x2
+0x000100d8: addi x3, x3, -1124
+0x000100dc: lui x10, 0x1000
+0x000100e0: addi x2, x10, 0
+0x000100e4: lui x10, 0x2000
+0x000100e8: jal x1, init_heap
+0x00010308: sw x0, -2028(x3)
+0x0001030c: sw x10, -2024(x3)
+0x00010310: jalr x0, 0(x1)
+0x000100ec: lui x10, 0x1000
+0x000100f0: jal x1, args_to_main
+0x000100f8: addi x11, x10, 0
+0x000100fc: lw x10, 0(x10)
+0x00010100: addi x11, x11, 4
+0x00010104: jal x0, main
+0x00010094: addi x2, x2, -16
+0x00010098: sw x8, 8(x2)
+0x0001009c: lui x8, 0x11
+0x000100a0: lbu x10, 1136(x8)
+0x000100a4: sw x1, 12(x2)
+0x000100a8: beq x10, x0, 0x000100c0
+0x000100ac: addi x8, x8, 1136
+0x000100b0: addi x8, x8, 1
+0x000100b4: jal x1, outp
+0x0001011c: addi x15, x10, 0
+0x00010120: addi x10, x15, 0
+0x00010124: addi x17, x0, 2
+0x00010128: ecall
+
+Simulated 28 instructions in 106 host ticks (0.264151 MIPS)
