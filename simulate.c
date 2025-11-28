@@ -1,10 +1,15 @@
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "simulate.h"
 #include "memory.h"
 #include "disassemble.h"   // så vi kan logge pænt med tekst
 #include "read_elf.h"      // symbols er deklareret her
+
+// --- Branch Prediction Configuration ---
+#define NUM_SIZES 4
+static const int predictor_sizes[NUM_SIZES] = {256, 1024, 4096, 16384};
 
 // --- Hjælpefunktioner ---------------------------------------------
 
@@ -125,6 +130,33 @@ struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct 
     uint32_t pc = (uint32_t) start_addr;
 
     int running = 1;
+
+    // --- Branch Prediction Setup ---
+    // Simple predictors
+    long int nt_total = 0, nt_miss = 0;
+    long int btfnt_total = 0, btfnt_miss = 0;
+
+    // Bimodal: array of 2-bit saturating counters for each size
+    uint8_t *bimodal[NUM_SIZES];
+    long int bimodal_total[NUM_SIZES] = {0};
+    long int bimodal_miss[NUM_SIZES] = {0};
+
+    // gShare: array of 2-bit saturating counters + global history register
+    uint8_t *gshare[NUM_SIZES];
+    long int gshare_total[NUM_SIZES] = {0};
+    long int gshare_miss[NUM_SIZES] = {0};
+    uint32_t ghr = 0; // Global History Register (12 bits)
+
+    // Allocate and initialize predictor tables
+    for (int i = 0; i < NUM_SIZES; i++) {
+        bimodal[i] = (uint8_t*)calloc(predictor_sizes[i], sizeof(uint8_t));
+        gshare[i] = (uint8_t*)calloc(predictor_sizes[i], sizeof(uint8_t));
+        // Initialize to weakly not-taken (state 1: 01 in binary)
+        for (int j = 0; j < predictor_sizes[i]; j++) {
+            bimodal[i][j] = 1;
+            gshare[i][j] = 1;
+        }
+    }
 
     while (running) {
         // Hent instruktion fra lager (word)
@@ -383,6 +415,62 @@ struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct 
                         running = 0;
                         break;
                 }
+
+                // --- Branch Prediction Logic ---
+                // Determine if branch was actually taken
+                int taken = (next_pc != pc + 4);
+
+                // NT (Not Taken): Always predict not taken
+                nt_total++;
+                int nt_pred = 0;
+                if (nt_pred != taken) nt_miss++;
+
+                // BTFNT (Backward Taken, Forward Not Taken)
+                btfnt_total++;
+                int backward = (imm < 0);
+                int btfnt_pred = backward ? 1 : 0;
+                if (btfnt_pred != taken) btfnt_miss++;
+
+                // Bimodal and gShare predictors
+                for (int i = 0; i < NUM_SIZES; i++) {
+                    int size = predictor_sizes[i];
+
+                    // --- Bimodal Predictor ---
+                    // Index using lower bits of PC (word-aligned, so shift by 2)
+                    int bimodal_idx = (pc >> 2) % size;
+                    bimodal_total[i]++;
+                    // 2-bit counter: >= 2 predicts taken, < 2 predicts not taken
+                    int bimodal_pred = (bimodal[i][bimodal_idx] >= 2) ? 1 : 0;
+                    if (bimodal_pred != taken) bimodal_miss[i]++;
+                    // Update counter: increment if taken (saturate at 3), decrement if not taken (saturate at 0)
+                    if (taken) {
+                        if (bimodal[i][bimodal_idx] < 3) bimodal[i][bimodal_idx]++;
+                    } else {
+                        if (bimodal[i][bimodal_idx] > 0) bimodal[i][bimodal_idx]--;
+                    }
+
+                    // --- gShare Predictor ---
+                    // Index using XOR of PC bits and global history
+                    // Use appropriate number of bits for the table size
+                    int ghr_bits = 0;
+                    int temp_size = size;
+                    while (temp_size > 1) { ghr_bits++; temp_size >>= 1; }
+                    uint32_t ghr_mask = (1u << ghr_bits) - 1;
+                    int gshare_idx = ((pc >> 2) ^ (ghr & ghr_mask)) % size;
+                    gshare_total[i]++;
+                    int gshare_pred = (gshare[i][gshare_idx] >= 2) ? 1 : 0;
+                    if (gshare_pred != taken) gshare_miss[i]++;
+                    // Update counter
+                    if (taken) {
+                        if (gshare[i][gshare_idx] < 3) gshare[i][gshare_idx]++;
+                    } else {
+                        if (gshare[i][gshare_idx] > 0) gshare[i][gshare_idx]--;
+                    }
+                }
+
+                // Update global history register (shift left, insert taken bit)
+                ghr = ((ghr << 1) | taken) & 0xFFF; // Keep 12 bits
+
                 break;
             }
 
@@ -485,6 +573,49 @@ struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct 
 
         // Opdatér PC til næste instruktion (eller branch/jump-target)
         pc = next_pc;
+    }
+
+    // --- Report Branch Prediction Results ---
+    printf("\n=== Branch Prediction Results ===\n");
+    printf("\n[NT] Not Taken:\n");
+    printf("  Predictions: %ld\n", nt_total);
+    printf("  Mispredictions: %ld\n", nt_miss);
+    if (nt_total > 0) {
+        printf("  Accuracy: %.2f%%\n", 100.0 * (nt_total - nt_miss) / nt_total);
+    }
+
+    printf("\n[BTFNT] Backward Taken, Forward Not Taken:\n");
+    printf("  Predictions: %ld\n", btfnt_total);
+    printf("  Mispredictions: %ld\n", btfnt_miss);
+    if (btfnt_total > 0) {
+        printf("  Accuracy: %.2f%%\n", 100.0 * (btfnt_total - btfnt_miss) / btfnt_total);
+    }
+
+    printf("\n[Bimodal] Dynamic 2-bit Predictor:\n");
+    for (int i = 0; i < NUM_SIZES; i++) {
+        printf("  Size %d:\n", predictor_sizes[i]);
+        printf("    Predictions: %ld\n", bimodal_total[i]);
+        printf("    Mispredictions: %ld\n", bimodal_miss[i]);
+        if (bimodal_total[i] > 0) {
+            printf("    Accuracy: %.2f%%\n", 100.0 * (bimodal_total[i] - bimodal_miss[i]) / bimodal_total[i]);
+        }
+    }
+
+    printf("\n[gShare] Global History Predictor:\n");
+    for (int i = 0; i < NUM_SIZES; i++) {
+        printf("  Size %d:\n", predictor_sizes[i]);
+        printf("    Predictions: %ld\n", gshare_total[i]);
+        printf("    Mispredictions: %ld\n", gshare_miss[i]);
+        if (gshare_total[i] > 0) {
+            printf("    Accuracy: %.2f%%\n", 100.0 * (gshare_total[i] - gshare_miss[i]) / gshare_total[i]);
+        }
+    }
+    printf("\n");
+
+    // Free predictor tables
+    for (int i = 0; i < NUM_SIZES; i++) {
+        free(bimodal[i]);
+        free(gshare[i]);
     }
 
     return stat;
