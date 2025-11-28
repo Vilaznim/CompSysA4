@@ -1,6 +1,9 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#include <stdbool.h>
+#include <string.h>
+
 #include "simulate.h"
 #include "memory.h"
 #include "disassemble.h"   // så vi kan logge pænt med tekst
@@ -125,18 +128,20 @@ struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct 
     uint32_t pc = (uint32_t) start_addr;
 
     int running = 1;
+    bool next_is_jump_target = false; // mark the next instruction if it's a jump/branch target
 
     while (running) {
         // Hent instruktion fra lager (word)
         uint32_t instr = (uint32_t) memory_rd_w(mem, (int)pc);
         stat.insns++;
 
-        // Evt. log: disassembler instr til tekst
-        if (log_file != NULL) {
-            char line[128];
-            disassemble(pc, instr, line, sizeof(line), symbols);
-            fprintf(log_file, "0x%08x: %s\n", pc, line);
-        }
+        // Prepare logging helpers for this instruction
+        char asm_text[128] = {0};
+        char reg_change[128] = "";
+        char mem_change[128] = "";
+        const char *branch_tag = "";
+        bool was_jump_target = next_is_jump_target;
+        next_is_jump_target = false;
 
         // Dekodér felter
         uint32_t opcode = instr & 0x7F;
@@ -148,7 +153,8 @@ struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct 
 
         // Som udgangspunkt går vi videre til næste instruktion
         uint32_t next_pc = pc + 4;
-
+        // Remember old destination register value to detect writes
+        uint32_t old_rd_val = x[rd];
         switch (opcode) {
 
             // ---------------- R-type: OP (add, sub, and, or, mul, div, rem, ...)
@@ -338,12 +344,21 @@ struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct 
                 switch (funct3) {
                     case 0x0:  // sb
                         memory_wr_b(mem, addr, (int)(x[rs2] & 0xFF));
+                        if (log_file != NULL) {
+                            snprintf(mem_change, sizeof(mem_change), "M[%08x] <- %02x", addr, (unsigned)(x[rs2] & 0xFF));
+                        }
                         break;
                     case 0x1:  // sh
                         memory_wr_h(mem, addr, (int)(x[rs2] & 0xFFFF));
+                        if (log_file != NULL) {
+                            snprintf(mem_change, sizeof(mem_change), "M[%08x] <- %04x", addr, (unsigned)(x[rs2] & 0xFFFF));
+                        }
                         break;
                     case 0x2:  // sw
                         memory_wr_w(mem, addr, (int)x[rs2]);
+                        if (log_file != NULL) {
+                            snprintf(mem_change, sizeof(mem_change), "M[%08x] <- %08x", addr, x[rs2]);
+                        }
                         break;
                     default:
                         fprintf(stderr, "Unknown store at 0x%08x\n", pc);
@@ -383,6 +398,11 @@ struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct 
                         running = 0;
                         break;
                 }
+                // If branch changes PC, mark next instruction as a jump target for logging
+                if (next_pc != pc + 4) {
+                    next_is_jump_target = true;
+                    branch_tag = "{T}";
+                }
                 break;
             }
 
@@ -407,6 +427,7 @@ struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct 
                 x[rd] = ret_addr;
                 int32_t target = (int32_t)pc + imm;
                 next_pc = (uint32_t)target;
+                next_is_jump_target = true;
                 break;
             }
 
@@ -417,6 +438,7 @@ struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct 
                 uint32_t target = (x[rs1] + imm) & ~1u;
                 x[rd] = ret_addr;
                 next_pc = target;
+                next_is_jump_target = true;
                 break;
             }
 
@@ -440,7 +462,10 @@ struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct 
                             break;
                         }
                         case 3: { // terminate: exit with code in a0
-                            // Optionally use the code in x[10]
+                            running = 0;
+                            break;
+                        }
+                        case 93: { // exit (alternative exit number per spec)
                             running = 0;
                             break;
                         }
@@ -478,6 +503,33 @@ struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct 
                 fprintf(stderr, "Unknown opcode 0x%02x at 0x%08x\n", opcode, pc);
                 running = 0;
                 break;
+        }
+
+        // Detect register write to rd (any instruction that writes rd will be caught)
+        if (rd != 0 && x[rd] != old_rd_val) {
+            snprintf(reg_change, sizeof(reg_change), "R[%2u] <- %08x", rd, x[rd]);
+        }
+
+        // For conditional branches we already set branch_tag when taken.
+
+        // If there was a memory write, handlers have filled `mem_change` already.
+
+        // If logging is enabled, produce a single-line entry with details.
+        if (log_file != NULL) {
+            // Disassemble text for this instruction
+            disassemble(pc, instr, asm_text, sizeof(asm_text), symbols);
+
+            // Prefix: indicate if this instruction was the target of a jump
+            const char *prefix = was_jump_target ? "=>" : "  ";
+
+            // Compose extras: branch_tag, reg_change, mem_change
+            char extras[256] = "";
+            if (branch_tag[0]) snprintf(extras + strlen(extras), sizeof(extras) - strlen(extras), " %s", branch_tag);
+            if (reg_change[0])  snprintf(extras + strlen(extras), sizeof(extras) - strlen(extras), " %s", reg_change);
+            if (mem_change[0])  snprintf(extras + strlen(extras), sizeof(extras) - strlen(extras), " %s", mem_change);
+
+            fprintf(log_file, "%6u %2s  %08x : %08x    %-30s %s\n",
+                    stat.insns, prefix, pc, instr, asm_text, extras);
         }
 
         // x0 er altid 0 i RISC-V
