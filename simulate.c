@@ -611,7 +611,7 @@ struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct 
             if (reg_change[0])  snprintf(extras + strlen(extras), sizeof(extras) - strlen(extras), " %s", reg_change);
             if (mem_change[0])  snprintf(extras + strlen(extras), sizeof(extras) - strlen(extras), " %s", mem_change);
 
-            fprintf(log_file, "%6u %2s  %08x : %08x    %-30s %s\n",
+                fprintf(log_file, "%6ld %2s  %08x : %08x    %-30s %s\n",
                     stat.insns, prefix, pc, instr, asm_text, extras);
         }
 
