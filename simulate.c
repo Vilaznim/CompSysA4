@@ -10,6 +10,9 @@
 #include "disassemble.h"   // så vi kan logge pænt med tekst
 #include "read_elf.h"      // symbols er deklareret her
 
+/* Debug: define to print every fetched instruction (helps diagnose opcode issues) */
+/* #define DEBUG_FETCH 1 */
+
 // --- Branch Prediction Configuration ---
 #define NUM_SIZES 4
 static const int predictor_sizes[NUM_SIZES] = {256, 1024, 4096, 16384};
@@ -165,6 +168,10 @@ struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct 
     while (running) {
         // Hent instruktion fra lager (word)
         uint32_t instr = (uint32_t) memory_rd_w(mem, (int)pc);
+        // Debug: print raw fetched instruction for tracing opcode issues
+    #ifdef DEBUG_FETCH
+        fprintf(stderr, "DEBUG FETCH: PC=0x%08x INSTR=0x%08x\n", pc, instr);
+    #endif
         stat.insns++;
 
         // Prepare logging helpers for this instruction
