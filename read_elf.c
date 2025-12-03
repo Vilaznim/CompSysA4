@@ -53,7 +53,8 @@ int read_elf(struct memory* mem, struct program_info* info, const char *filename
             // Identify segment type
             if (program_header.p_flags & PF_X) {
                 // segment_type = "Executable (.text)";
-                info->text_start = program_header.p_vaddr + (unsigned int)(sizeof(Elf32_Ehdr) + elf_header.e_phnum * sizeof(Elf32_Phdr));
+                // text_start should be the segment virtual address in memory
+                info->text_start = program_header.p_vaddr;
                 info->text_end = program_header.p_vaddr + program_header.p_filesz;
             } else if (program_header.p_flags & PF_W) {
                 // segment_type = "Writable (static data)";
@@ -219,7 +220,7 @@ struct symbols* symbols_read_from_elf(const char *filename) {
 const char* symbols_value_to_sym(struct symbols* symbols, unsigned int value) 
 {
     for (int i = 0; i < symbols->num_symbols; i++) {
-        if (symbols->symbols[i].st_value == value && ELF32_ST_BIND(symbols->symbols[i].st_info)) {
+        if (symbols->symbols[i].st_value == value) {
             return &symbols->strtab[symbols->symbols[i].st_name];
         }
     }
