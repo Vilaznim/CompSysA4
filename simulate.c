@@ -527,6 +527,12 @@ struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct 
             // Determine if branch was actually taken
             int taken = (next_pc != pc + 4);
 
+            // Set branch tag for logging so taken branches are marked in logs
+            if (taken)
+            {
+                branch_tag = "{T}";
+            }
+
             // NT (Not Taken): Always predict not taken
             nt_total++;
             int nt_pred = 0;

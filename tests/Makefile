@@ -1,6 +1,6 @@
 CC = riscv64-unknown-elf-gcc
 CFLAGS = -march=rv32im -mabi=ilp32 -O0 -nostartfiles -nostdlib -Ttext=0x0
-TESTS = r_tests i_tests mem_branch_tests m_tests syscall_tests
+TESTS = r_tests i_tests mem_branch_tests m_tests syscall_tests divzero
 OUTDIR = build
 SIM ?= ../sim
 
