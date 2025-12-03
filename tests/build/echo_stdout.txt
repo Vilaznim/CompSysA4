@@ -1,0 +1,49 @@
+Hej med dig - skriv noget, saa bliver jeg glad: Du skrev: abc
+=== Branch Prediction Results ===
+
+[NT] Not Taken:
+  Predictions: 74
+  Mispredictions: 65
+  Accuracy: 12.16%
+
+[BTFNT] Backward Taken, Forward Not Taken:
+  Predictions: 74
+  Mispredictions: 4
+  Accuracy: 94.59%
+
+[Bimodal] Dynamic 2-bit Predictor:
+  Size 256:
+    Predictions: 74
+    Mispredictions: 6
+    Accuracy: 91.89%
+  Size 1024:
+    Predictions: 74
+    Mispredictions: 6
+    Accuracy: 91.89%
+  Size 4096:
+    Predictions: 74
+    Mispredictions: 6
+    Accuracy: 91.89%
+  Size 16384:
+    Predictions: 74
+    Mispredictions: 6
+    Accuracy: 91.89%
+
+[gShare] Global History Predictor:
+  Size 256:
+    Predictions: 74
+    Mispredictions: 21
+    Accuracy: 71.62%
+  Size 1024:
+    Predictions: 74
+    Mispredictions: 26
+    Accuracy: 64.86%
+  Size 4096:
+    Predictions: 74
+    Mispredictions: 30
+    Accuracy: 59.46%
+  Size 16384:
+    Predictions: 74
+    Mispredictions: 30
+    Accuracy: 59.46%
+

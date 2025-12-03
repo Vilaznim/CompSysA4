@@ -1,0 +1,50 @@
+Hello from RISC-V
+
+=== Branch Prediction Results ===
+
+[NT] Not Taken:
+  Predictions: 19
+  Mispredictions: 18
+  Accuracy: 5.26%
+
+[BTFNT] Backward Taken, Forward Not Taken:
+  Predictions: 19
+  Mispredictions: 1
+  Accuracy: 94.74%
+
+[Bimodal] Dynamic 2-bit Predictor:
+  Size 256:
+    Predictions: 19
+    Mispredictions: 2
+    Accuracy: 89.47%
+  Size 1024:
+    Predictions: 19
+    Mispredictions: 2
+    Accuracy: 89.47%
+  Size 4096:
+    Predictions: 19
+    Mispredictions: 2
+    Accuracy: 89.47%
+  Size 16384:
+    Predictions: 19
+    Mispredictions: 2
+    Accuracy: 89.47%
+
+[gShare] Global History Predictor:
+  Size 256:
+    Predictions: 19
+    Mispredictions: 10
+    Accuracy: 47.37%
+  Size 1024:
+    Predictions: 19
+    Mispredictions: 12
+    Accuracy: 36.84%
+  Size 4096:
+    Predictions: 19
+    Mispredictions: 14
+    Accuracy: 26.32%
+  Size 16384:
+    Predictions: 19
+    Mispredictions: 14
+    Accuracy: 26.32%
+

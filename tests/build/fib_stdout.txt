@@ -1,0 +1,50 @@
+fib(7) = 13
+
+=== Branch Prediction Results ===
+
+[NT] Not Taken:
+  Predictions: 66
+  Mispredictions: 37
+  Accuracy: 43.94%
+
+[BTFNT] Backward Taken, Forward Not Taken:
+  Predictions: 66
+  Mispredictions: 30
+  Accuracy: 54.55%
+
+[Bimodal] Dynamic 2-bit Predictor:
+  Size 256:
+    Predictions: 66
+    Mispredictions: 32
+    Accuracy: 51.52%
+  Size 1024:
+    Predictions: 66
+    Mispredictions: 32
+    Accuracy: 51.52%
+  Size 4096:
+    Predictions: 66
+    Mispredictions: 32
+    Accuracy: 51.52%
+  Size 16384:
+    Predictions: 66
+    Mispredictions: 32
+    Accuracy: 51.52%
+
+[gShare] Global History Predictor:
+  Size 256:
+    Predictions: 66
+    Mispredictions: 35
+    Accuracy: 46.97%
+  Size 1024:
+    Predictions: 66
+    Mispredictions: 34
+    Accuracy: 48.48%
+  Size 4096:
+    Predictions: 66
+    Mispredictions: 37
+    Accuracy: 43.94%
+  Size 16384:
+    Predictions: 66
+    Mispredictions: 37
+    Accuracy: 43.94%
+
