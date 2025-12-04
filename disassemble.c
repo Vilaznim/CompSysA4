@@ -19,8 +19,8 @@ static const char *reg_name(unsigned r)
 
 static int32_t sign_extend(uint32_t value, int bits)
 {
-    uint32_t mask = 1u << (bits - 1); // bit for fortegn
-    // hvis fortegnsbitten er sat, fyld resten med 1'ere
+    uint32_t mask = 1u << (bits - 1); // sign bit
+    // if the sign bit is set, fill the upper bits with ones
     if (value & mask)
     {
         value |= ~((1u << bits) - 1);
@@ -28,7 +28,7 @@ static int32_t sign_extend(uint32_t value, int bits)
     return (int32_t)value;
 }
 
-// Dekodering af de forskellige immediate-formater:
+// Decode the different immediate formats:
 
 // I-type: imm[11:0] = instr[31:20]
 static int32_t imm_i(uint32_t instr)
@@ -47,7 +47,7 @@ static int32_t imm_s(uint32_t instr)
     return sign_extend(imm, 12);
 }
 
-// B-type: imm[12|10:5|4:1|11] = instr[31|30:25|11:8|7], mindste bit er 0
+// B-type: imm[12|10:5|4:1|11] = instr[31|30:25|11:8|7], least significant bit is 0
 static int32_t imm_b(uint32_t instr)
 {
     uint32_t imm = 0;
@@ -58,14 +58,14 @@ static int32_t imm_b(uint32_t instr)
     return sign_extend(imm, 13);
 }
 
-// U-type: imm[31:12] = instr[31:12], lower 12 bits er 0
+// U-type: imm[31:12] = instr[31:12], lower 12 bits are 0
 static int32_t imm_u(uint32_t instr)
 {
     uint32_t imm = instr & 0xFFFFF000u;
-    return (int32_t)imm; // ingen sign-extend nødvendig, den bruges som 20-bit øverste
+    return (int32_t)imm; // no sign-extend needed; used as the upper 20 bits
 }
 
-// J-type: imm[20|10:1|11|19:12] = instr[31|30:21|20|19:12], mindste bit 0
+// J-type: imm[20|10:1|11|19:12] = instr[31|30:21|20|19:12], least significant bit is 0
 static int32_t imm_j(uint32_t instr)
 {
     uint32_t imm = 0;
@@ -84,13 +84,13 @@ void disassemble(uint32_t addr,
 {
     (void)symbols; // Suppress unused parameter warning
 
-    // Hvis bufferen er NULL eller størrelse 0, så gør ingenting
+    // If the buffer is NULL or buf_size is 0, do nothing
     if (result == NULL || buf_size == 0)
     {
         return;
     }
 
-    // Dekodér basisfelter
+    // Decode basic fields
     uint32_t opcode = instruction & 0x7F;
     uint32_t rd = (instruction >> 7) & 0x1F;
     uint32_t funct3 = (instruction >> 12) & 0x7;
@@ -98,13 +98,12 @@ void disassemble(uint32_t addr,
     uint32_t rs2 = (instruction >> 20) & 0x1F;
     uint32_t funct7 = (instruction >> 25) & 0x7F;
 
-    // Default: vis bare .word hvis vi ikke kender instruktionen
-    // (god fallback så du kan se rå data)
+    // Default: show .word if the instruction is unknown
     snprintf(result, buf_size, ".word 0x%08x", instruction);
 
     switch (opcode)
     {
-    // R-type instruktioner (OP): add, sub, mul, div, ...
+    // R-type instructions (OP): add, sub, mul, div, ...
     case 0x33:
     {
         const char *mnemonic = NULL;
@@ -281,7 +280,7 @@ void disassemble(uint32_t addr,
 
         if (mnemonic)
         {
-            uint32_t target = addr + imm; // addr er adressen for denne instr.
+            uint32_t target = addr + imm; // addr is the address of this instruction
             const char *sym = NULL;
             if (symbols)
                 sym = symbols_value_to_sym(symbols, target);
@@ -362,7 +361,7 @@ void disassemble(uint32_t addr,
     // SYSTEM (opcode 0x73): ecall, ebreak
     case 0x73:
     {
-        // I-type layout, men funct3 er normalt 0
+        // I-type layout, but funct3 is normally 0
         if (instruction == 0x00000073)
         {
             snprintf(result, buf_size, "ecall");
@@ -379,7 +378,7 @@ void disassemble(uint32_t addr,
     }
 
     default:
-        // Vi lod default være .word i starten af funktionen
+        // Default handled by initial .word at function start
         break;
     }
 }

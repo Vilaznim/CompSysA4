@@ -7,22 +7,19 @@
 
 #include "simulate.h"
 #include "memory.h"
-#include "disassemble.h" // så vi kan logge pænt med tekst
-#include "read_elf.h"    // symbols er deklareret her
-
-/* Debug: define to print every fetched instruction (helps diagnose opcode issues) */
-/* #define DEBUG_FETCH 1 */
+#include "disassemble.h"
+#include "read_elf.h"
 
 // --- Branch Prediction Configuration ---
 #define NUM_SIZES 4
 static const int predictor_sizes[NUM_SIZES] = {256, 1024, 4096, 16384};
 
-// --- Hjælpefunktioner ---------------------------------------------
+// --- Helper functions ---------------------------------------------
 
-// Sign-extend 'value' som har 'bits' betydende bits (f.eks. 12 for I-immediates)
+// Sign-extend 'value' which has 'bits' significant bits (e.g. 12 for I-immediates)
 static int32_t sign_extend(uint32_t value, int bits)
 {
-    uint32_t mask = 1u << (bits - 1); // fortegnbit
+    uint32_t mask = 1u << (bits - 1); // sign bit
     if (value & mask)
     {
         value |= ~((1u << bits) - 1);
@@ -76,7 +73,7 @@ static int32_t imm_j(uint32_t instr)
     return sign_extend(imm, 21);
 }
 
-// Multiply high helpers using only 32-bit arithmetic.
+// Multiply-high helpers implemented with 32-bit arithmetic.
 // Return high 32 bits of unsigned 32x32->64 multiplication.
 static uint32_t mulhu_u32(uint32_t a, uint32_t b)
 {
@@ -85,7 +82,7 @@ static uint32_t mulhu_u32(uint32_t a, uint32_t b)
     uint32_t b0 = b & 0xFFFFu;
     uint32_t b1 = b >> 16;
 
-    uint32_t z0 = a0 * b0; // fits in 32 bits
+    uint32_t z0 = a0 * b0;
     uint32_t z1 = a0 * b1;
     uint32_t z2 = a1 * b0;
     uint32_t z3 = a1 * b1;
@@ -113,7 +110,7 @@ static uint32_t mulh_s32(int32_t a_signed, int32_t b_signed)
     uint32_t high = mulhu_u32(ua, ub);
     uint32_t low = ua * ub;
 
-    // If signs differ, negate 64-bit (high:low)
+    // If signs differ negate 64-bit (high:low)
     if ((a_signed < 0) ^ (b_signed < 0))
     {
         low = ~low + 1u;                      // two's complement low
@@ -138,13 +135,13 @@ static uint32_t mulhsu_s32(int32_t a_signed, uint32_t b_unsigned)
     return high;
 }
 
-// --- Selve simulatoren ---------------------------------------------
+// --- The simulator ---------------------------------------------
 
 struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct symbols *symbols)
 {
     struct Stat stat = {0};
 
-    // 32 general-purpose registre
+    // 32 general-purpose registers
     uint32_t x[32] = {0};
     uint32_t pc = (uint32_t)start_addr;
 
@@ -156,7 +153,7 @@ struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct 
     long int nt_total = 0, nt_miss = 0;
     long int btfnt_total = 0, btfnt_miss = 0;
 
-    // Bimodal: array of 2-bit saturating counters for each size
+    // Bimodal: array of 2-bit saturating counters for each configured size
     uint8_t *bimodal[NUM_SIZES];
     long int bimodal_total[NUM_SIZES] = {0};
     long int bimodal_miss[NUM_SIZES] = {0};
@@ -172,7 +169,7 @@ struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct 
     {
         bimodal[i] = (uint8_t *)calloc(predictor_sizes[i], sizeof(uint8_t));
         gshare[i] = (uint8_t *)calloc(predictor_sizes[i], sizeof(uint8_t));
-        // Initialize to weakly not-taken (state 1: 01 in binary)
+        // Initialize to weakly not-taken (state 1: binary 01)
         for (int j = 0; j < predictor_sizes[i]; j++)
         {
             bimodal[i][j] = 1;
@@ -182,7 +179,7 @@ struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct 
 
     while (running)
     {
-        // Hent instruktion fra lager (word)
+        // Fetch instruction from memory (word)
         uint32_t instr = (uint32_t)memory_rd_w(mem, (int)pc);
         // Debug: print raw fetched instruction for tracing opcode issues
 #ifdef DEBUG_FETCH
@@ -198,7 +195,7 @@ struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct 
         bool was_jump_target = next_is_jump_target;
         next_is_jump_target = false;
 
-        // Dekodér felter
+        // Decode fields
         uint32_t opcode = instr & 0x7F;
         uint32_t rd = (instr >> 7) & 0x1F;
         uint32_t funct3 = (instr >> 12) & 0x7;
@@ -206,7 +203,7 @@ struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct 
         uint32_t rs2 = (instr >> 20) & 0x1F;
         uint32_t funct7 = (instr >> 25) & 0x7F;
 
-        // Som udgangspunkt går vi videre til næste instruktion
+        // By default advance to the next instruction
         uint32_t next_pc = pc + 4;
         // Remember old destination register value to detect writes
         uint32_t old_rd_val = x[rd];
@@ -220,25 +217,25 @@ struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct 
             {
             case 0x0: // add / sub / mul
                 if (funct7 == 0x00)
-                { // add
+                {
                     x[rd] = x[rs1] + x[rs2];
                 }
                 else if (funct7 == 0x20)
-                { // sub
+                {
                     x[rd] = x[rs1] - x[rs2];
                 }
                 else if (funct7 == 0x01)
-                { // mul (M-extension)
+                {
                     x[rd] = (uint32_t)((int32_t)x[rs1] * (int32_t)x[rs2]);
                 }
                 break;
             case 0x4: // xor / div (signed)
                 if (funct7 == 0x00)
-                { // xor
+                {
                     x[rd] = x[rs1] ^ x[rs2];
                 }
                 else if (funct7 == 0x01)
-                { // div (M-extension, signed)
+                {
                     int32_t a = (int32_t)x[rs1];
                     int32_t b = (int32_t)x[rs2];
                     if (b == 0)
@@ -259,7 +256,7 @@ struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct 
             case 0x6: // or / rem (signed)
                 if (funct7 == 0x00)
                 {
-                    x[rd] = x[rs1] | x[rs2]; // or
+                    x[rd] = x[rs1] | x[rs2];
                 }
                 else if (funct7 == 0x01)
                 {
@@ -310,15 +307,15 @@ struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct 
 
             case 0x5: // srl / sra / divu
                 if (funct7 == 0x00)
-                { // srl
+                {
                     x[rd] = x[rs1] >> (x[rs2] & 0x1F);
                 }
                 else if (funct7 == 0x20)
-                { // sra
+                {
                     x[rd] = (uint32_t)((int32_t)x[rs1] >> (x[rs2] & 0x1F));
                 }
                 else if (funct7 == 0x01)
-                { // divu (M-extension unsigned)
+                {
                     uint32_t a = x[rs1];
                     uint32_t b = x[rs2];
                     if (b == 0)
@@ -353,7 +350,7 @@ struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct 
                 break;
 
             default:
-                // ukendt R-instruktion
+                // unknown R-type instruction
                 fprintf(stderr, "Unknown R-type at 0x%08x\n", pc);
                 running = 0;
                 break;
@@ -386,16 +383,17 @@ struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct 
                 x[rd] = (x[rs1] < (uint32_t)imm) ? 1u : 0u;
                 break;
             case 0x1:
-            { // slli
+            {
                 uint32_t shamt = (instr >> 20) & 0x1F;
                 x[rd] = x[rs1] << shamt;
                 break;
             }
             case 0x5:
-            { // srli / srai
+            {
                 uint32_t shamt = (instr >> 20) & 0x1F;
+                // if bit 30 is set -> arithmetic right shift (srai)
                 if ((instr >> 30) & 0x1)
-                { // bit 30 = 1 => srai
+                {
                     x[rd] = (uint32_t)((int32_t)x[rs1] >> shamt);
                 }
                 else
@@ -420,13 +418,13 @@ struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct 
             switch (funct3)
             {
             case 0x0:
-            { // lb
+            {
                 int8_t v = (int8_t)memory_rd_b(mem, addr);
                 x[rd] = (int32_t)v;
                 break;
             }
             case 0x1:
-            { // lh
+            {
                 int16_t v = (int16_t)memory_rd_h(mem, addr);
                 x[rd] = (int32_t)v;
                 break;
@@ -523,17 +521,17 @@ struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct 
                 break;
             }
 
-            // --- Branch Prediction Logic ---
+            // --- Branch prediction logic ---
             // Determine if branch was actually taken
             int taken = (next_pc != pc + 4);
 
-            // Set branch tag for logging so taken branches are marked in logs
+            // Set branch tag for logging so taken branches are marked
             if (taken)
             {
                 branch_tag = "{T}";
             }
 
-            // NT (Not Taken): Always predict not taken
+            // NT (Not Taken): always predict not taken
             nt_total++;
             int nt_pred = 0;
             if (nt_pred != taken)
@@ -551,11 +549,11 @@ struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct 
             {
                 int size = predictor_sizes[i];
 
-                // --- Bimodal Predictor ---
-                // Index using lower bits of PC (word-aligned, so shift by 2)
+                // --- Bimodal predictor ---
+                // Index using lower bits of PC (word-aligned, shift by 2)
                 int bimodal_idx = (pc >> 2) % size;
                 bimodal_total[i]++;
-                // 2-bit counter: >= 2 predicts taken, < 2 predicts not taken
+                // 2-bit counter: >=2 predicts taken, <2 predicts not taken
                 int bimodal_pred = (bimodal[i][bimodal_idx] >= 2) ? 1 : 0;
                 if (bimodal_pred != taken)
                     bimodal_miss[i]++;
@@ -571,9 +569,9 @@ struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct 
                         bimodal[i][bimodal_idx]--;
                 }
 
-                // --- gShare Predictor ---
-                // Index using XOR of PC bits and global history
-                // Use appropriate number of bits for the table size
+                // --- gShare predictor ---
+                // Index using XOR of PC bits and the global history register
+                // Determine how many history bits are needed for this table size
                 int ghr_bits = 0;
                 int temp_size = size;
                 while (temp_size > 1)
@@ -601,7 +599,7 @@ struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct 
             }
 
             // Update global history register (shift left, insert taken bit)
-            ghr = ((ghr << 1) | taken) & 0xFFF; // Keep 12 bits
+            ghr = ((ghr << 1) | taken) & 0xFFF; // keep 12 bits
 
             break;
         }
@@ -733,9 +731,7 @@ struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct 
         }
 
         // For conditional branches we already set branch_tag when taken.
-
         // If there was a memory write, handlers have filled `mem_change` already.
-
         // If logging is enabled, produce a single-line entry with details.
         if (log_file != NULL)
         {
@@ -758,10 +754,10 @@ struct Stat simulate(struct memory *mem, int start_addr, FILE *log_file, struct 
                     stat.insns, prefix, pc, instr, asm_text, extras);
         }
 
-        // x0 er altid 0 i RISC-V
+        // x0 is always zero in RISC-V
         x[0] = 0;
 
-        // Opdatér PC til næste instruktion (eller branch/jump-target)
+        // Update PC to the next instruction (or branch/jump target)
         pc = next_pc;
     }
 
